@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title></title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    
+   
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <link rel="stylesheet" href="//cdn.webrtc-experiment.com/style.css">
+
+    <style>
+	    audio,
+	    video {
+	        -moz-transition: all 1s ease;
+	        -ms-transition: all 1s ease;
+	        -o-transition: all 1s ease;
+	        -webkit-transition: all 1s ease;
+	        transition: all 1s ease;
+	        vertical-align: top;
+	    }
+	    
+	    input {
+	        border: 1px solid #d9d9d9;
+	        border-radius: 1px;
+	        font-size: 2em;
+	        margin: .2em;
+	        width: 20%;
+	    }
+	    
+	    select {
+	        border: 1px solid #d9d9d9;
+	        border-radius: 1px;
+	        height: 50px;
+	        margin-left: 1em;
+	        margin-right: -12px;
+	        padding: 1.1em;
+	        vertical-align: 6px;
+	    }
+	    
+	    .setup {
+	        border-bottom-left-radius: 0;
+	        border-top-left-radius: 0;
+	        font-size: 102%;
+	        height: 47px;
+	        margin-left: -9px;
+	        margin-top: 8px;
+	        position: absolute;
+	    }
+	    
+	    p {
+	        padding: 1em;
+	    }
+	    
+	    #chat-output div,
+	    #file-progress div {
+	        border: 1px solid black;
+	        border-bottom: 0;
+	        padding: .1em .4em;
+	    }
+	    
+	    #chat-output,
+	    #file-progress {
+	        margin: 0 0 0 .4em;
+	        max-height: 12em;
+	        overflow: auto;
+	    }
+	    
+	    .data-box input {
+	        border: 1px solid black;
+	        font-family: inherit;
+	        font-size: 1em;
+	        margin: .1em .3em;
+	        outline: none;
+	        padding: .1em .2em;
+	        width: 97%;
+	    }
+    </style>
+  
+
+    <!-- webrtc library used for streaming -->
+   
+    <script src="//cdn.webrtc-experiment.com/getMediaElement.min.js"></script>
+    <script src="//cdn.webrtc-experiment.com/RTCMultiConnection.js"></script>
+
+    <script src="https://www.webrtc-experiment.com/RecordRTC.js"> </script>
+    
+    <script src="https://cdn.socket.io/socket.io-1.2.0.js"></script>
+</head>
+
+<body>
+    <article>
+  
+
+        <!-- just copy this <section> and next script -->
+        <section class="experiment">
+        
+            <section>
+               
+                <input type="text" id="session-name">
+                <button id="setup-new-session" class="setup">New Session</button>
+            </section>
+
+            <!-- list of all available broadcasting rooms -->
+            <table style="width: 100%;" id="rooms-list"></table>
+
+            <!-- local/remote videos container -->
+            <div id="videos-container"></div>
+        </section>
+
+        <script>
+       
+	        var connection = new RTCMultiConnection();
+
+	        connection.session = {
+	            audio: true,
+	            video: true
+	        };
+
+	        var roomsList = document.getElementById('rooms-list'),
+	            sessions = {};
+	        connection.onNewSession = function(session) {
+	            if (sessions[session.sessionid]) return;
+	            sessions[session.sessionid] = session;
+
+	            var tr = document.createElement('tr');
+	            tr.innerHTML = '<td><strong>' + session.extra['session-name'] + '</strong> is an active session.</td>' +
+	                '<td><button class="join">Join</button></td>';
+	            roomsList.insertBefore(tr, roomsList.firstChild);
+
+	            tr.querySelector('.join').setAttribute('data-sessionid', session.sessionid);
+	            tr.querySelector('.join').onclick = function() {
+	                this.disabled = true;
+
+	                session = sessions[this.getAttribute('data-sessionid')];
+	                if (!session) alert('No room to join.');
+
+	                connection.join(session);
+	            };
+	        };
+
+	        var videosContainer = document.getElementById('videos-container') || document.body;
+	        var socketio = io();
+	        var mediaStream = null;
+	        var recordVideo;
+	        connection.onstream = function(e) {
+	            var buttons = ['mute-audio', 'mute-video', 'record-audio', 'record-video', 'full-screen', 'volume-slider', 'stop'];
+
+	            if (connection.session.audio && !connection.session.video) {
+	                buttons = ['mute-audio', 'full-screen', 'stop'];
+	            }
+
+	            var mediaElement = getMediaElement(e.mediaElement, {
+	                width: (videosContainer.clientWidth / 2) - 50,
+	                title: e.userid,
+	                buttons: buttons,
+	                onMuted: function(type) {
+	                    connection.streams[e.streamid].mute({
+	                        audio: type == 'audio',
+	                        video: type == 'video'
+	                    });
+	                },
+	                onUnMuted: function(type) {
+	                    connection.streams[e.streamid].unmute({
+	                        audio: type == 'audio',
+	                        video: type == 'video'
+	                    });
+	                },
+	                onRecordingStarted: function(type) {
+	                    // www.RTCMultiConnection.org/docs/startRecording/
+	                    connection.streams[e.streamid].startRecording({
+	                        audio: type == 'audio',
+	                        video: type == 'video'
+	                    });
+	                },
+	                onRecordingStopped: function(type) {
+	                    // www.RTCMultiConnection.org/docs/stopRecording/
+	                    connection.streams[e.streamid].stopRecording(function(blob) {
+	                    	console.log("BLOB.video: ", blob.video);
+	                    	console.log("BLOB.audio: ", blob.audio);
+	                        //if (blob.audio) connection.saveToDisk(blob.audio);
+	                        //else if (blob.video) connection.saveToDisk(blob.video);
+	                        //else connection.saveToDisk(blob);
+	                        //var files = {
+	                        	//video: {
+	                        		//type: 'video/webm',
+	                        		//dataURL: blob
+	                        	//}
+	                        //};
+	                        //console.log("BLOB URL: ", files['video']['dataURL']);
+	                    }, type);
+	                },
+	                onStopped: function() {
+	                    connection.peers[e.userid].drop();
+	                }
+	            });
+
+	            videosContainer.insertBefore(mediaElement, videosContainer.firstChild);
+	            //videosContainer.appendChild(e.mediaElement);
+
+
+	           
+	            mediaStream = e.stream;
+	           	recordVideo = RecordRTC(e.stream, {
+	           		type: 'video'
+	           	});
+
+	           	recordVideo.startRecording();
+
+	            if (e.type == 'local') {
+	                mediaElement.media.muted = true;
+	                mediaElement.media.volume = 0;
+	            }
+
+	        };
+
+	        connection.onstreamended = function(e) {
+	            if (e.mediaElement.parentNode && e.mediaElement.parentNode.parentNode && e.mediaElement.parentNode.parentNode.parentNode) {
+	                e.mediaElement.parentNode.parentNode.parentNode.removeChild(e.mediaElement.parentNode.parentNode);
+	            }
+	            recordVideo.stopRecording(function(){
+	            	recordVideo.getDataURL(function(videoDataURL){
+	            		var files = {
+	            			video: {
+	            				type: recordVideo.getBlob().type || 'video/webm',
+	            				dataURL: videoDataURL
+	            			}
+	            		};
+	            		socketio.emit('message', files);
+	            		if(mediaStream) mediaStream.stop();
+	            	});
+	            });
+	        };
+
+	        var setupNewSession = document.getElementById('setup-new-session');
+
+	        setupNewSession.onclick = function() {
+	            setupNewSession.disabled = true;         
+
+	            var session = {};
+	           
+	            var maxParticipantsAllowed = 4;
+
+	            session.audio = true;
+	            session.video = true;
+	            var sessionName = document.getElementById('session-name').value;
+	            connection.extra = {
+	                'session-name': sessionName || 'Anonymous'
+	            };
+
+	            connection.session = session;
+	            connection.maxParticipantsAllowed = maxParticipantsAllowed;
+
+	         
+
+	            connection.sessionid = sessionName || 'Anonymous';
+	            connection.open();
+	            //console.log("CHECK: ", connection);
+	        };
+
+	        connection.onmessage = function(e) {
+	            appendDIV(e.data);
+
+	            console.debug(e.userid, 'posted', e.data);
+	            console.log('latency:', e.latency, 'ms');
+	        };
+
+	        connection.onclose = function(e) {
+	            appendDIV('Data connection is closed between you and ' + e.userid);
+	        };
+
+	        connection.onleave = function(e) {
+	            appendDIV(e.userid + ' left the session.');
+	        };
+
+	        // on data connection gets open
+	        connection.onopen = function(e) {
+	           console.log("NEW123: ", e.userid);
+	        };
+
+	        function appendDIV(div, parent) {
+	            if (typeof div === 'string') {
+	                var content = div;
+	                div = document.createElement('div');
+	                div.innerHTML = content;
+	            }
+
+	            if (!parent) chatOutput.insertBefore(div, chatOutput.firstChild);
+	            else fileProgress.insertBefore(div, fileProgress.firstChild);
+
+	            div.tabIndex = 0;
+	            div.focus();
+	        }
+
+	      
+
+	        connection.connect();
+        </script>
+
+
+   
+</body>
+
+</html>
