@@ -98,8 +98,18 @@
         <section class="experiment">
         
             <section>
-               
-                <input type="text" id="session-name">
+               	<select id="resolution" title="Resolution">
+                    <option>1920x1080</option>
+                    <option>1280x720</option>
+                    <option>960x720</option>
+                    <option>640x360</option>
+                    <option>340x240</option>
+                    <option>340x180</option>
+                    <option selected>160x120</option>
+
+                </select>
+	            <input type="text" id="frame-rate">
+                <input type="text" id="session-name" placeholder="Name">
                 <button id="setup-new-session" class="setup">New Session</button>
             </section>
 
@@ -118,7 +128,19 @@
 	            audio: true,
 	            video: true
 	        };
+	        connection.bandwidth = {
+	        	audio: 20,
+	        	video: 30
+	        };
+	        //connection.media.max(160, 120);
 
+	        var resolution_string = document.getElementById('resolution').value;
+	            var frame_rate = document.getElementById('frame-rate').value;
+	            var num_res = resolution_string.split('x');
+	            console.log("Frame: ", frame_rate);
+	            console.log("Resolution: ", resolution_string);
+
+			
 	        var roomsList = document.getElementById('rooms-list'),
 	            sessions = {};
 	        connection.onNewSession = function(session) {
@@ -146,62 +168,20 @@
 	        var mediaStream = null;
 	        var recordVideo;
 	        connection.onstream = function(e) {
-	            var buttons = ['mute-audio', 'mute-video', 'record-audio', 'record-video', 'full-screen', 'volume-slider', 'stop'];
 
-	            if (connection.session.audio && !connection.session.video) {
-	                buttons = ['mute-audio', 'full-screen', 'stop'];
-	            }
 
-	            var mediaElement = getMediaElement(e.mediaElement, {
-	                width: (videosContainer.clientWidth / 2) - 50,
-	                title: e.userid,
-	                buttons: buttons,
-	                onMuted: function(type) {
-	                    connection.streams[e.streamid].mute({
-	                        audio: type == 'audio',
-	                        video: type == 'video'
-	                    });
-	                },
-	                onUnMuted: function(type) {
-	                    connection.streams[e.streamid].unmute({
-	                        audio: type == 'audio',
-	                        video: type == 'video'
-	                    });
-	                },
-	                onRecordingStarted: function(type) {
-	                    // www.RTCMultiConnection.org/docs/startRecording/
-	                    connection.streams[e.streamid].startRecording({
-	                        audio: type == 'audio',
-	                        video: type == 'video'
-	                    });
-	                },
-	                onRecordingStopped: function(type) {
-	                    // www.RTCMultiConnection.org/docs/stopRecording/
-	                    connection.streams[e.streamid].stopRecording(function(blob) {
-	                    	console.log("BLOB.video: ", blob.video);
-	                    	console.log("BLOB.audio: ", blob.audio);
-	                        //if (blob.audio) connection.saveToDisk(blob.audio);
-	                        //else if (blob.video) connection.saveToDisk(blob.video);
-	                        //else connection.saveToDisk(blob);
-	                        //var files = {
-	                        	//video: {
-	                        		//type: 'video/webm',
-	                        		//dataURL: blob
-	                        	//}
-	                        //};
-	                        //console.log("BLOB URL: ", files['video']['dataURL']);
-	                    }, type);
-	                },
-	                onStopped: function() {
-	                    connection.peers[e.userid].drop();
-	                }
-	            });
-
-	            videosContainer.insertBefore(mediaElement, videosContainer.firstChild);
 	            //videosContainer.appendChild(e.mediaElement);
-
-
-	           
+	           	var buttons = ['stop'];
+	           	var mediaElement = getMediaElement(e.mediaElement, {
+	           		width: num_res[0],
+	           		height: num_res[1],
+	           		title: e.userid,
+	           		buttons: buttons,
+	           		onStopped: function(){
+	           			connection.peers[e.userid].drop();
+	           		}
+	           	});
+	           	videosContainer.insertBefore(mediaElement, videosContainer.firstChild);
 	            mediaStream = e.stream;
 	           	recordVideo = RecordRTC(e.stream, {
 	           		type: 'video'
@@ -209,10 +189,6 @@
 
 	           	recordVideo.startRecording();
 
-	            if (e.type == 'local') {
-	                mediaElement.media.muted = true;
-	                mediaElement.media.volume = 0;
-	            }
 
 	        };
 
@@ -243,6 +219,8 @@
 	           
 	            var maxParticipantsAllowed = 4;
 
+
+
 	            session.audio = true;
 	            session.video = true;
 	            var sessionName = document.getElementById('session-name').value;
@@ -250,13 +228,20 @@
 	                'session-name': sessionName || 'Anonymous'
 	            };
 
+
+	            
+	          
+
+	            connection.media.max(num_res[0], num_res[1]);
+
+
 	            connection.session = session;
 	            connection.maxParticipantsAllowed = maxParticipantsAllowed;
-
-	         
-
 	            connection.sessionid = sessionName || 'Anonymous';
 	            connection.open();
+
+
+
 	            //console.log("CHECK: ", connection);
 	        };
 
@@ -271,15 +256,7 @@
 	            appendDIV('Data connection is closed between you and ' + e.userid);
 	        };
 
-	        connection.onleave = function(e) {
-	            appendDIV(e.userid + ' left the session.');
-	        };
-
-	        // on data connection gets open
-	        connection.onopen = function(e) {
-	           console.log("NEW123: ", e.userid);
-	        };
-
+	       
 	        function appendDIV(div, parent) {
 	            if (typeof div === 'string') {
 	                var content = div;
